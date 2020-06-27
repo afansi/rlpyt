@@ -78,7 +78,7 @@ class CategoricalDQN(DQN):
         losses = -torch.sum(target_p * torch.log(p), dim=1)  # Cross-entropy.
 
         if self.prioritized_replay:
-            losses *= samples.is_weights
+            losses *= samples.is_weights.to(self.agent.device)
 
         target_p = torch.clamp(target_p, EPS, 1)
         KL_div = torch.sum(target_p *
