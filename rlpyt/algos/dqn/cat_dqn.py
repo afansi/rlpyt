@@ -39,7 +39,7 @@ class CategoricalDQN(DQN):
 
         Returns loss and KL-divergence-errors for use in prioritization.
         """
-	samples_return_, samples_done_n, samples_is_weights = buffer_to(
+        samples_return_, samples_done_n, samples_is_weights = buffer_to(
             (samples.return_, samples.done_n, samples.is_weights),
             device=self.agent.device)
         delta_z = (self.V_max - self.V_min) / (self.agent.n_atoms - 1)
