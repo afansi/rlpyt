@@ -41,7 +41,7 @@ class CategoricalDQN(DQN):
         Returns loss and KL-divergence-errors for use in prioritization.
         """
         delta_z = (self.V_max - self.V_min) / (self.agent.n_atoms - 1)
-        z = torch.linspace(self.V_min, self.V_max, self.agent.n_atoms, device=self.agent.device)
+        z = torch.linspace(self.V_min, self.V_max, self.agent.n_atoms)
         # Makde 2-D tensor of contracted z_domain for each data point,
         # with zeros where next value should not be added.
         next_z = z * (self.discount ** self.n_step_return)  # [P']
