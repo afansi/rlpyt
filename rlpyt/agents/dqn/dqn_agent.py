@@ -26,7 +26,7 @@ class DqnAgent(EpsilonGreedyAgentMixin, BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         q = self.model(*model_inputs)
-        return q.cpu()
+        return q
 
     def initialize(self, env_spaces, share_memory=False,
             global_B=1, env_ranks=None):
@@ -70,7 +70,7 @@ class DqnAgent(EpsilonGreedyAgentMixin, BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         target_q = self.target_model(*model_inputs)
-        return target_q.cpu()
+        return target_q
 
     def update_target(self, tau=1):
         """Copies the model parameters into the target model."""

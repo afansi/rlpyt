@@ -331,7 +331,7 @@ class R2D1(DQN):
         mean_d = valid_mean(td_abs_errors, valid, dim=0)  # Still high if less valid.
         priorities = self.pri_eta * max_d + (1 - self.pri_eta) * mean_d  # [B]
 
-        return loss, valid_td_abs_errors, priorities
+        return loss, valid_td_abs_errors.cpu(), priorities.cpu()
 
     def value_scale(self, x):
         """Value scaling function to handle raw rewards across games (not clipped)."""

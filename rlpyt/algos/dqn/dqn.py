@@ -259,7 +259,7 @@ class DQN(RlAlgorithm):
         else:
             loss = torch.mean(losses)
 
-        return loss, td_abs_errors
+        return loss, td_abs_errors.cpu()
 
     def update_itr_hyperparams(self, itr):
         # EPS NOW IN AGENT.

@@ -90,4 +90,4 @@ class CategoricalDQN(DQN):
         else:
             loss = torch.mean(losses)
 
-        return loss, KL_div
+        return loss, KL_div.cpu()
