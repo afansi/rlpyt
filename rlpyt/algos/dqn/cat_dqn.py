@@ -4,6 +4,7 @@ import torch
 from rlpyt.algos.dqn.dqn import DQN
 from rlpyt.utils.tensor import select_at_indexes, valid_mean
 from rlpyt.algos.utils import valid_from_done
+from rlpyt.utils.buffer import buffer_to
 
 
 EPS = 1e-6  # (NaN-guard)
