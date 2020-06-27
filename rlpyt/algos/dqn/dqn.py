@@ -11,6 +11,7 @@ from rlpyt.replays.non_sequence.frame import (UniformReplayFrameBuffer,
 from rlpyt.utils.collections import namedarraytuple
 from rlpyt.utils.tensor import select_at_indexes, valid_mean
 from rlpyt.algos.utils import valid_from_done
+from rlpyt.utils.buffer import buffer_to
 
 OptInfo = namedtuple("OptInfo", ["loss", "gradNorm", "tdAbsErr"])
 SamplesToBuffer = namedarraytuple("SamplesToBuffer",
@@ -225,6 +226,15 @@ class DQN(RlAlgorithm):
             between iterations, so some samples in the replay buffer will be
             invalid.  This case is not supported here currently.
         """
+        if self.prioritized_replay:
+            samples_return_, samples_done_n, samples_is_weights = buffer_to(
+                (samples.return_, samples.done_n, samples.is_weights),
+                device=self.agent.device
+            )
+        else:
+            samples_return_, samples_done_n = buffer_to(
+                (samples.return_, samples.done_n), device=self.agent.device
+            )
         qs = self.agent(*samples.agent_inputs)
         q = select_at_indexes(samples.action, qs)
         with torch.no_grad():
@@ -236,7 +246,7 @@ class DQN(RlAlgorithm):
             else:
                 target_q = torch.max(target_qs, dim=-1).values
         disc_target_q = (self.discount ** self.n_step_return) * target_q
-        y = samples.return_ + (1 - samples.done_n.float()) * disc_target_q
+        y = samples_return_ + (1 - samples_done_n.float()) * disc_target_q
         delta = y - q
         losses = 0.5 * delta ** 2
         abs_delta = abs(delta)
@@ -244,7 +254,7 @@ class DQN(RlAlgorithm):
             b = self.delta_clip * (abs_delta - self.delta_clip / 2)
             losses = torch.where(abs_delta <= self.delta_clip, losses, b)
         if self.prioritized_replay:
-            losses *= samples.is_weights
+            losses *= samples_is_weights
         td_abs_errors = abs_delta.detach()
         if self.delta_clip is not None:
             td_abs_errors = torch.clamp(td_abs_errors, 0, self.delta_clip)
