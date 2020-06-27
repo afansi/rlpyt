@@ -39,14 +39,16 @@ class CategoricalDQN(DQN):
 
         Returns loss and KL-divergence-errors for use in prioritization.
         """
-
+	samples_return_, samples_done_n, samples_is_weights = buffer_to(
+            (samples.return_, samples.done_n, samples.is_weights),
+            device=self.agent.device)
         delta_z = (self.V_max - self.V_min) / (self.agent.n_atoms - 1)
-        z = torch.linspace(self.V_min, self.V_max, self.agent.n_atoms)
+        z = torch.linspace(self.V_min, self.V_max, self.agent.n_atoms, device=self.agent.device)
         # Makde 2-D tensor of contracted z_domain for each data point,
         # with zeros where next value should not be added.
         next_z = z * (self.discount ** self.n_step_return)  # [P']
-        next_z = torch.ger(1 - samples.done_n.float(), next_z)  # [B,P']
-        ret = samples.return_.unsqueeze(1)  # [B,1]
+        next_z = torch.ger(1 - samples_done_n.float(), next_z)  # [B,P']
+        ret = samples_return_.unsqueeze(1)  # [B,1]
         next_z = torch.clamp(ret + next_z, self.V_min, self.V_max)  # [B,P']
 
         z_bc = z.view(1, -1, 1)  # [1,P,1]
@@ -76,7 +78,7 @@ class CategoricalDQN(DQN):
         losses = -torch.sum(target_p * torch.log(p), dim=1)  # Cross-entropy.
 
         if self.prioritized_replay:
-            losses *= samples.is_weights
+            losses *= samples_is_weights
 
         target_p = torch.clamp(target_p, EPS, 1)
         KL_div = torch.sum(target_p *
