@@ -227,16 +227,17 @@ class DQN(RlAlgorithm):
             invalid.  This case is not supported here currently.
         """
         if self.prioritized_replay:
-            samples_return_, samples_done_n, samples_is_weights = buffer_to(
-                (samples.return_, samples.done_n, samples.is_weights),
+            samples_return_, samples_done_n, samples_action, samples_is_weights = buffer_to(
+                (samples.return_, samples.done_n, samples.action, samples.is_weights),
                 device=self.agent.device
             )
         else:
-            samples_return_, samples_done_n = buffer_to(
-                (samples.return_, samples.done_n), device=self.agent.device
+            samples_return_, samples_done_n, samples_action = buffer_to(
+                (samples.return_, samples.done_n, samples.action),
+                device=self.agent.device
             )
         qs = self.agent(*samples.agent_inputs)
-        q = select_at_indexes(samples.action, qs)
+        q = select_at_indexes(samples_action, qs)
         with torch.no_grad():
             target_qs = self.agent.target(*samples.target_inputs)
             if self.double_dqn:

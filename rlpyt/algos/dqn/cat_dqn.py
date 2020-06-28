@@ -41,13 +41,14 @@ class CategoricalDQN(DQN):
         Returns loss and KL-divergence-errors for use in prioritization.
         """
         if self.prioritized_replay:
-            samples_return_, samples_done_n, samples_is_weights = buffer_to(
-                (samples.return_, samples.done_n, samples.is_weights),
+            samples_return_, samples_done_n, samples_action, samples_is_weights = buffer_to(
+                (samples.return_, samples.done_n, samples.action, samples.is_weights),
                 device=self.agent.device
             )
         else:
-            samples_return_, samples_done_n = buffer_to(
-                (samples.return_, samples.done_n), device=self.agent.device
+            samples_return_, samples_done_n, samples_action = buffer_to(
+                (samples.return_, samples.done_n, samples.action),
+                device=self.agent.device
             )
         delta_z = (self.V_max - self.V_min) / (self.agent.n_atoms - 1)
         z = torch.linspace(self.V_min, self.V_max, self.agent.n_atoms, device=self.agent.device)
@@ -80,7 +81,7 @@ class CategoricalDQN(DQN):
             target_p_unproj = target_p_unproj.unsqueeze(1)  # [B,1,P']
             target_p = (target_p_unproj * projection_coeffs).sum(-1)  # [B,P]
         ps = self.agent(*samples.agent_inputs)  # [B,A,P]
-        p = select_at_indexes(samples.action, ps)  # [B,P]
+        p = select_at_indexes(samples_action, ps)  # [B,P]
         p = torch.clamp(p, EPS, 1)  # NaN-guard.
         losses = -torch.sum(target_p * torch.log(p), dim=1)  # Cross-entropy.
 

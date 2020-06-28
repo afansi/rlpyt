@@ -38,7 +38,7 @@ class CatDqnAgent(DqnAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         p = self.model(*model_inputs)
-        p = p.cpu()
+        # p = p.cpu()
         action = self.distribution.sample(p)
         agent_info = AgentInfo(p=p)  # Only change from DQN: q -> p.
         action, agent_info = buffer_to((action, agent_info), device="cpu")
