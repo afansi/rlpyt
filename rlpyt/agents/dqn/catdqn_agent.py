@@ -23,12 +23,17 @@ class CatDqnAgent(DqnAgent):
         super().initialize(env_spaces, share_memory, global_B, env_ranks)
         # Overwrite distribution.
         self.distribution = CategoricalEpsilonGreedy(dim=env_spaces.action.n,
-            z=torch.linspace(-1, 1, self.n_atoms))  # z placeholder for init.
+            z=torch.linspace(-1, 1, self.n_atoms, device=self.device))  # z placeholder for init.
 
     def give_V_min_max(self, V_min, V_max):
         self.V_min = V_min
         self.V_max = V_max
-        self.distribution.set_z(torch.linspace(V_min, V_max, self.n_atoms))
+        self.distribution.set_z(torch.linspace(V_min, V_max, self.n_atoms, device=self.device))
+
+    def to_device(self, cuda_idx=None):
+        super().to_device(cuda_idx)
+        if self.distribution.z is not None:
+            self.distribution.set_z(self.distribution.z.to(self.device))
 
     @torch.no_grad()
     def step(self, observation, prev_action, prev_reward):

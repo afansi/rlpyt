@@ -58,10 +58,10 @@ class DqnAgent(EpsilonGreedyAgentMixin, BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         q = self.model(*model_inputs)
-        q = q.cpu()
+        # q = q.cpu()
         action = self.distribution.sample(q)
         agent_info = AgentInfo(q=q)
-        # action, agent_info = buffer_to((action, agent_info), device="cpu")
+        action, agent_info = buffer_to((action, agent_info), device="cpu")
         return AgentStep(action=action, agent_info=agent_info)
 
     def target(self, observation, prev_action, prev_reward):

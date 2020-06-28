@@ -17,7 +17,7 @@ class EpsilonGreedy(DiscreteMixin, Distribution):
         B will apply across the Batch dimension (same epsilon for all T)."""
         arg_select = torch.argmax(q, dim=-1)
         mask = torch.rand(arg_select.shape) < self._epsilon
-        arg_rand = torch.randint(low=0, high=q.shape[-1], size=(mask.sum(),))
+        arg_rand = torch.randint(low=0, high=q.shape[-1], size=(mask.sum(),), device=q.device)
         arg_select[mask] = arg_rand
         return arg_select
 
