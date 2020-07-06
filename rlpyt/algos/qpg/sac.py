@@ -126,17 +126,10 @@ class SAC(RlAlgorithm):
         Allocates replay buffer using examples and with the fields in `SamplesToBuffer`
         namedarraytuple.
         """
-        example_to_buffer = SamplesToBuffer(
-            observation=examples["observation"],
-            action=examples["action"],
-            reward=examples["reward"],
-            done=examples["done"],
-        )
+        example_to_buffer = self.examples_to_buffer(examples)
         if not self.bootstrap_timelimit:
             ReplayCls = AsyncUniformReplayBuffer if async_ else UniformReplayBuffer
         else:
-            example_to_buffer = SamplesToBufferTl(*example_to_buffer,
-                timeout=examples["env_info"].timeout)
             ReplayCls = AsyncTlUniformReplayBuffer if async_ else TlUniformReplayBuffer
         replay_kwargs = dict(
             example=example_to_buffer,
@@ -217,6 +210,21 @@ class SAC(RlAlgorithm):
             samples_to_buffer = SamplesToBufferTl(*samples_to_buffer,
                 timeout=samples.env.env_info.timeout)
         return samples_to_buffer
+
+    def examples_to_buffer(self, examples):
+        """Defines how to initialize the replay buffer from examples. Called
+        in initialize_replay_buffer().
+        """
+        example_to_buffer = SamplesToBuffer(
+            observation=examples["observation"],
+            action=examples["action"],
+            reward=examples["reward"],
+            done=examples["done"],
+        )
+        if self.bootstrap_timelimit:
+            example_to_buffer = SamplesToBufferTl(*example_to_buffer,
+                timeout=examples["env_info"].timeout)
+        return example_to_buffer
 
     def loss(self, samples):
         """
