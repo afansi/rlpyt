@@ -73,13 +73,8 @@ class PPO(PolicyGradientAlgo):
         if hasattr(self.agent, "update_obs_rms"):
             self.agent.update_obs_rms(agent_inputs.observation)
         return_, advantage, valid = self.process_returns(samples)
-        loss_inputs = LossInputs(  # So can slice all.
-            agent_inputs=agent_inputs,
-            action=samples.agent.action,
-            return_=return_,
-            advantage=advantage,
-            valid=valid,
-            old_dist_info=samples.agent.agent_info.dist_info,
+        loss_inputs = self.loss_input_from_samples(
+            samples, agent_inputs, return_, advantage, valid
         )
         if recurrent:
             # Leave in [B,N,H] for slicing to minibatches.
@@ -97,7 +92,7 @@ class PPO(PolicyGradientAlgo):
                 rnn_state = init_rnn_state[B_idxs] if recurrent else None
                 # NOTE: if not recurrent, will lose leading T dim, should be OK.
                 loss, entropy, perplexity = self.loss(
-                    *loss_inputs[T_idxs, B_idxs], rnn_state)
+                    loss_inputs[T_idxs, B_idxs], rnn_state)
                 loss.backward()
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     self.agent.parameters(), self.clip_grad_norm)
@@ -114,8 +109,17 @@ class PPO(PolicyGradientAlgo):
 
         return opt_info
 
-    def loss(self, agent_inputs, action, return_, advantage, valid, old_dist_info,
-            init_rnn_state=None):
+    def loss_input_from_samples(self, samples, agent_inputs, return_, advantage, valid):
+        return LossInputs(  # So can slice all.
+            agent_inputs=agent_inputs,
+            action=samples.agent.action,
+            return_=return_,
+            advantage=advantage,
+            valid=valid,
+            old_dist_info=samples.agent.agent_info.dist_info,
+        )
+
+    def loss(self, loss_inputs, init_rnn_state=None):
         """
         Compute the training loss: policy_loss + value_loss + entropy_loss
         Policy loss: min(likelhood-ratio * advantage, clip(likelihood_ratio, 1-eps, 1+eps) * advantage)
@@ -124,6 +128,7 @@ class PPO(PolicyGradientAlgo):
         the ``agent.distribution`` to compute likelihoods and entropies.  Valid
         for feedforward or recurrent agents.
         """
+        agent_inputs, action, return_, advantage, valid, old_dist_info = loss_inputs
         if init_rnn_state is not None:
             # [B,N,H] --> [N,B,H] (for cudnn).
             init_rnn_state = buffer_method(init_rnn_state, "transpose", 0, 1)
