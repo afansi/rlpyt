@@ -128,7 +128,14 @@ class PPO(PolicyGradientAlgo):
         the ``agent.distribution`` to compute likelihoods and entropies.  Valid
         for feedforward or recurrent agents.
         """
-        agent_inputs, action, return_, advantage, valid, old_dist_info = loss_inputs
+        agent_inputs, action, return_, advantage, valid, old_dist_info = (
+            loss_inputs.agent_inputs,
+            loss_inputs.action,
+            loss_inputs.return_,
+            loss_inputs.advantage,
+            loss_inputs.valid,
+            loss_inputs.old_dist_info,
+        )
         if init_rnn_state is not None:
             # [B,N,H] --> [N,B,H] (for cudnn).
             init_rnn_state = buffer_method(init_rnn_state, "transpose", 0, 1)
