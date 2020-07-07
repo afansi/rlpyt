@@ -173,7 +173,7 @@ class R2D1(DQN):
         """Defines how to initialize the replay buffer from examples. Called
         in initialize_replay_buffer().
         """
-        example_to_buffer =  = super().examples_to_buffer(examples)
+        example_to_buffer = super().examples_to_buffer(examples)
         if self.store_rnn_state_interval > 0:
             example_to_buffer = SamplesToBufferRnn(*example_to_buffer,
                 prev_rnn_state=examples["agent_info"].prev_rnn_state,
