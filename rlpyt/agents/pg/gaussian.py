@@ -21,7 +21,7 @@ class GaussianPgAgent(BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         mu, log_std, value = self.model(*model_inputs)
-        return buffer_to((DistInfoStd(mean=mu, log_std=log_std), value), device="cpu")
+        return (DistInfoStd(mean=mu, log_std=log_std), value)
 
     def initialize(self, env_spaces, share_memory=False,
             global_B=1, env_ranks=None):
@@ -75,7 +75,7 @@ class RecurrentGaussianPgAgentBase(BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward,
             init_rnn_state), device=self.device)
         mu, log_std, value, next_rnn_state = self.model(*model_inputs)
-        dist_info, value = buffer_to((DistInfoStd(mean=mu, log_std=log_std), value), device="cpu")
+        dist_info = DistInfoStd(mean=mu, log_std=log_std)
         return dist_info, value, next_rnn_state  # Leave rnn_state on device.
 
     def initialize(self, env_spaces, share_memory=False,

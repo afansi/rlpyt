@@ -145,8 +145,23 @@ class PPO(PolicyGradientAlgo):
             dist_info, value = self.agent(*agent_inputs)
         dist = self.agent.distribution
 
-        ratio = dist.likelihood_ratio(action, old_dist_info=old_dist_info,
-            new_dist_info=dist_info)
+        old_dist_component = dist.component_log_likelihood_ratio(
+            action, old_dist_info
+        )
+
+        action, return_, advantage, valid, old_dist_component = buffer_to(
+            (action, return_, advantage, valid, old_dist_component),
+            device=self.agent.device
+        )
+
+        new_dist_component = dist.component_log_likelihood_ratio(
+            action, dist_info
+        )
+
+        ratio = dist.log_likelihood_ratio_from_component(
+            old_dist_component=old_dist_component,
+            new_dist_component=new_dist_component
+        )
         surr_1 = ratio * advantage
         clipped_ratio = torch.clamp(ratio, 1. - self.ratio_clip,
             1. + self.ratio_clip)
