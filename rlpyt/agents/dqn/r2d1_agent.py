@@ -20,7 +20,7 @@ class R2d1AgentBase(DqnAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward,
             init_rnn_state), device=self.device)
         q, rnn_state = self.model(*model_inputs)
-        return q.cpu(), rnn_state  # Leave rnn state on device.
+        return q, rnn_state  # Leave rnn state on device.
 
     @torch.no_grad()
     def step(self, observation, prev_action, prev_reward):
@@ -30,13 +30,13 @@ class R2d1AgentBase(DqnAgent):
         agent_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         q, rnn_state = self.model(*agent_inputs, self.prev_rnn_state)  # Model handles None.
-        q = q.cpu()
+        # q = q.cpu()
         action = self.distribution.sample(q)
         prev_rnn_state = self.prev_rnn_state or buffer_func(rnn_state, torch.zeros_like)
         # Transpose the rnn_state from [N,B,H] --> [B,N,H] for storage.
         # (Special case, model should always leave B dimension in.)
         prev_rnn_state = buffer_method(prev_rnn_state, "transpose", 0, 1)
-        prev_rnn_state = buffer_to(prev_rnn_state, device="cpu")
+        prev_rnn_state, action, q = buffer_to((prev_rnn_state, action, q), device="cpu")
         agent_info = AgentInfo(q=q, prev_rnn_state=prev_rnn_state)
         self.advance_rnn_state(rnn_state)  # Keep on device.
         return AgentStep(action=action, agent_info=agent_info)
@@ -47,7 +47,7 @@ class R2d1AgentBase(DqnAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward, init_rnn_state),
             device=self.device)
         target_q, rnn_state = self.target_model(*model_inputs)
-        return target_q.cpu(), rnn_state  # Leave rnn state on device.
+        return target_q, rnn_state  # Leave rnn state on device.
 
 
 class R2d1Agent(RecurrentAgentMixin, R2d1AgentBase):

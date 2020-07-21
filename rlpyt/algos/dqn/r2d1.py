@@ -277,6 +277,17 @@ class R2D1(DQN):
         action = samples.all_action[wT + 1:wT + 1 + bT]  # CPU.
         return_ = samples.return_[wT:wT + bT]
         done_n = samples.done_n[wT:wT + bT]
+        
+        if self.prioritized_replay:
+            return_, done_n, action, samples_is_weights = buffer_to(
+                (return_, done_n, action, samples.is_weights),
+                device=self.agent.device
+            )
+        else:
+            return_, done_n, action = buffer_to(
+                (return_, done_n, action),
+                device=self.agent.device
+            )
         if self.store_rnn_state_interval == 0:
             init_rnn_state = None
         else:
@@ -320,7 +331,7 @@ class R2D1(DQN):
             b = self.delta_clip * (abs_delta - self.delta_clip / 2)
             losses = torch.where(abs_delta <= self.delta_clip, losses, b)
         if self.prioritized_replay:
-            losses *= samples.is_weights.unsqueeze(0)  # weights: [B] --> [1,B]
+            losses *= samples_is_weights.unsqueeze(0)  # weights: [B] --> [1,B]
         valid = valid_from_done(samples.done[wT:])  # 0 after first done.
         loss = valid_mean(losses, valid)
         td_abs_errors = abs_delta.detach()
@@ -331,7 +342,7 @@ class R2D1(DQN):
         mean_d = valid_mean(td_abs_errors, valid, dim=0)  # Still high if less valid.
         priorities = self.pri_eta * max_d + (1 - self.pri_eta) * mean_d  # [B]
 
-        return loss, valid_td_abs_errors, priorities
+        return loss, valid_td_abs_errors.cpu(), priorities.cpu()
 
     def value_scale(self, x):
         """Value scaling function to handle raw rewards across games (not clipped)."""
