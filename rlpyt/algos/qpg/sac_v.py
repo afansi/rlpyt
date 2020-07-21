@@ -110,13 +110,7 @@ class SAC_V(RlAlgorithm):
                 dim=self.agent.env_spaces.action.size, std=1.)
 
     def initialize_replay_buffer(self, examples, batch_spec, async_=False):
-        example_to_buffer = SamplesToBuffer(
-            observation=examples["observation"],
-            action=examples["action"],
-            reward=examples["reward"],
-            done=examples["done"],
-            timeout=getattr(examples["env_info"], "timeout", None),
-        )
+        example_to_buffer = self.examples_to_buffer(examples)
         replay_kwargs = dict(
             example=example_to_buffer,
             size=self.replay_size,
@@ -188,6 +182,18 @@ class SAC_V(RlAlgorithm):
             reward=samples.env.reward,
             done=samples.env.done,
             timeout=getattr(samples.env.env_info, "timeout", None),
+        )
+
+    def examples_to_buffer(self, examples):
+        """Defines how to initialize the replay buffer from examples. Called
+        in initialize_replay_buffer().
+        """
+        return SamplesToBuffer(
+            observation=examples["observation"],
+            action=examples["action"],
+            reward=examples["reward"],
+            done=examples["done"],
+            timeout=getattr(examples["env_info"], "timeout", None),
         )
 
     def loss(self, samples):

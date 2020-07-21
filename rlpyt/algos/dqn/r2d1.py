@@ -86,16 +86,7 @@ class R2D1(DQN):
     def initialize_replay_buffer(self, examples, batch_spec, async_=False):
         """Similar to DQN but uses replay buffers which return sequences, and
         stores the agent's recurrent state."""
-        example_to_buffer = SamplesToBuffer(
-            observation=examples["observation"],
-            action=examples["action"],
-            reward=examples["reward"],
-            done=examples["done"],
-        )
-        if self.store_rnn_state_interval > 0:
-            example_to_buffer = SamplesToBufferRnn(*example_to_buffer,
-                prev_rnn_state=examples["agent_info"].prev_rnn_state,
-            )
+        example_to_buffer = self.examples_to_buffer(examples)
         replay_kwargs = dict(
             example=example_to_buffer,
             size=self.replay_size,
@@ -177,6 +168,17 @@ class R2D1(DQN):
             samples_to_buffer = PrioritiesSamplesToBuffer(
                 priorities=priorities, samples=samples_to_buffer)
         return samples_to_buffer
+
+    def examples_to_buffer(self, examples):
+        """Defines how to initialize the replay buffer from examples. Called
+        in initialize_replay_buffer().
+        """
+        example_to_buffer = super().examples_to_buffer(examples)
+        if self.store_rnn_state_interval > 0:
+            example_to_buffer = SamplesToBufferRnn(*example_to_buffer,
+                prev_rnn_state=examples["agent_info"].prev_rnn_state,
+            )
+        return example_to_buffer
 
     def compute_input_priorities(self, samples):
         """Used when putting new samples into the replay buffer.  Computes

@@ -130,12 +130,7 @@ class DQN(RlAlgorithm):
         using less memory (usual observations are 4 most recent frames, with only newest
         frame distince from previous observation).
         """
-        example_to_buffer = SamplesToBuffer(
-            observation=examples["observation"],
-            action=examples["action"],
-            reward=examples["reward"],
-            done=examples["done"],
-        )
+        example_to_buffer = self.examples_to_buffer(examples)
         replay_kwargs = dict(
             example=example_to_buffer,
             size=self.replay_size,
@@ -204,6 +199,17 @@ class DQN(RlAlgorithm):
             action=samples.agent.action,
             reward=samples.env.reward,
             done=samples.env.done,
+        )
+
+    def examples_to_buffer(self, examples):
+        """Defines how to initialize the replay buffer from examples. Called
+        in initialize_replay_buffer().
+        """
+        return SamplesToBuffer(
+            observation=examples["observation"],
+            action=examples["action"],
+            reward=examples["reward"],
+            done=examples["done"],
         )
 
     def loss(self, samples):

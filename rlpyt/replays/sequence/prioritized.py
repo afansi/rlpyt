@@ -96,6 +96,9 @@ class PrioritizedSequenceReplay:
             self.priority_tree.advance(n, priorities=priorities)
         return T, idxs
 
+    def weight_batch_samples(self, batch, is_weights):
+        return SamplesFromReplayPri(*batch, is_weights=is_weights)
+
     def sample_batch(self, batch_B):
         """Returns batch with leading dimensions ``[self.batch_T, batch_B]``,
         with each sequence sampled randomly according to priority.
@@ -108,7 +111,7 @@ class PrioritizedSequenceReplay:
         is_weights = (1. / priorities) ** self.beta
         is_weights /= max(is_weights)  # Normalize.
         is_weights = torchify_buffer(is_weights).float()
-        return SamplesFromReplayPri(*batch, is_weights=is_weights)
+        return self.weight_batch_samples(batch, is_weights)
 
     def update_batch_priorities(self, priorities):
         priorities = numpify_buffer(priorities)
