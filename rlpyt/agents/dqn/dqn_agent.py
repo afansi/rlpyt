@@ -50,6 +50,17 @@ class DqnAgent(EpsilonGreedyAgentMixin, BaseAgent):
         return dict(model=self.model.state_dict(),
             target=self.target_model.state_dict())
 
+    def to_agent_step(self, output):
+        """Convert the output of the NN model into step info for the agent.
+        """
+        q = output
+        # q = q.cpu()
+        action = self.distribution.sample(q)
+        agent_info = AgentInfo(q=q)
+        action, agent_info = buffer_to((action, agent_info), device="cpu")
+        return AgentStep(action=action, agent_info=agent_info)
+        
+
     @torch.no_grad()
     def step(self, observation, prev_action, prev_reward):
         """Computes Q-values for states/observations and selects actions by
@@ -58,11 +69,7 @@ class DqnAgent(EpsilonGreedyAgentMixin, BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         q = self.model(*model_inputs)
-        # q = q.cpu()
-        action = self.distribution.sample(q)
-        agent_info = AgentInfo(q=q)
-        action, agent_info = buffer_to((action, agent_info), device="cpu")
-        return AgentStep(action=action, agent_info=agent_info)
+        return self.to_agent_step(q)
 
     def target(self, observation, prev_action, prev_reward):
         """Returns the target Q-values for states/observations."""

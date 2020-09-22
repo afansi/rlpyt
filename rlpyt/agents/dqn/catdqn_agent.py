@@ -35,6 +35,16 @@ class CatDqnAgent(DqnAgent):
         if self.distribution.z is not None:
             self.distribution.set_z(self.distribution.z.to(self.device))
 
+    def to_agent_step(self, output):
+        """Convert the output of the NN model into step info for the agent.
+        """
+        p = output
+        # p = p.cpu()
+        action = self.distribution.sample(p)
+        agent_info = AgentInfo(p=p)  # Only change from DQN: q -> p.
+        action, agent_info = buffer_to((action, agent_info), device="cpu")
+        return AgentStep(action=action, agent_info=agent_info)
+
     @torch.no_grad()
     def step(self, observation, prev_action, prev_reward):
         """Compute the discrete distribution for the Q-value for each
@@ -43,8 +53,4 @@ class CatDqnAgent(DqnAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         p = self.model(*model_inputs)
-        # p = p.cpu()
-        action = self.distribution.sample(p)
-        agent_info = AgentInfo(p=p)  # Only change from DQN: q -> p.
-        action, agent_info = buffer_to((action, agent_info), device="cpu")
-        return AgentStep(action=action, agent_info=agent_info)
+        return self.to_agent_step(p)
