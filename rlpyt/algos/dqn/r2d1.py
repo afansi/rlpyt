@@ -134,7 +134,7 @@ class R2D1(DQN):
         itr = itr if sampler_itr is None else sampler_itr  # Async uses sampler_itr
 
         # add samples in the replay buffer
-        self.add_samples_to_buffer(samples)
+        self.add_samples_to_buffer(itr, samples)
 
         opt_info = OptInfo(*([] for _ in range(len(OptInfo._fields))))
         if itr < self.min_itr_learn:

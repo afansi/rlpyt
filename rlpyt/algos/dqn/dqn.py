@@ -156,10 +156,11 @@ class DQN(RlAlgorithm):
                 " guaranteed.")
         self.replay_buffer = ReplayCls(**replay_kwargs)
 
-    def add_samples_to_buffer(self, samples=None):
+    def add_samples_to_buffer(self, itr, samples=None):
         """
         Adds the provided samples in the replay buffer.
         """
+        assert itr >= 0
         if samples is not None:
             samples_to_buffer = self.samples_to_buffer(samples)
             self.replay_buffer.append_samples(samples_to_buffer)
@@ -182,7 +183,7 @@ class DQN(RlAlgorithm):
         itr = itr if sampler_itr is None else sampler_itr  # Async uses sampler_itr.
 
         # add samples in the replay buffer
-        self.add_samples_to_buffer(samples)
+        self.add_samples_to_buffer(itr, samples)
 
         opt_info = OptInfo(*([] for _ in range(len(OptInfo._fields))))
         if itr < self.min_itr_learn:
