@@ -156,6 +156,21 @@ class DQN(RlAlgorithm):
                 " guaranteed.")
         self.replay_buffer = ReplayCls(**replay_kwargs)
 
+    def add_samples_to_buffer(self, samples=None):
+        """
+        Adds the provided samples in the replay buffer.
+        """
+        if samples is not None:
+            samples_to_buffer = self.samples_to_buffer(samples)
+            self.replay_buffer.append_samples(samples_to_buffer)
+
+    def pre_optimize_process(self):
+        """
+        Method for defining any process that shold take place before optimizing
+        the agent. Examples of such process are pretraining, ... 
+        """
+        pass
+
     def optimize_agent(self, itr, samples=None, sampler_itr=None):
         """
         Extracts the needed fields from input samples and stores them in the 
@@ -165,12 +180,17 @@ class DQN(RlAlgorithm):
         replay, updates the priorities for sampled training batches.
         """
         itr = itr if sampler_itr is None else sampler_itr  # Async uses sampler_itr.
-        if samples is not None:
-            samples_to_buffer = self.samples_to_buffer(samples)
-            self.replay_buffer.append_samples(samples_to_buffer)
+
+        # add samples in the replay buffer
+        self.add_samples_to_buffer(samples)
+
         opt_info = OptInfo(*([] for _ in range(len(OptInfo._fields))))
         if itr < self.min_itr_learn:
             return opt_info
+
+        if itr == self.min_itr_learn:
+            self.pre_optimize_process()
+
         for _ in range(self.updates_per_optimize):
             samples_from_replay = self.replay_buffer.sample_batch(self.batch_size)
             self.optimizer.zero_grad()
