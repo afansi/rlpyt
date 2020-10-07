@@ -2,7 +2,7 @@
 import torch
 
 from rlpyt.algos.dqn.dqn import DQN
-from rlpyt.utils.tensor import select_at_indexes, valid_mean
+from rlpyt.utils.tensor import valid_mean
 from rlpyt.algos.utils import valid_from_done
 from rlpyt.utils.buffer import buffer_to
 
@@ -77,11 +77,11 @@ class CategoricalDQN(DQN):
             else:
                 target_qs = torch.tensordot(target_ps, z, dims=1)  # [B,A]
                 next_a = torch.argmax(target_qs, dim=-1)  # [B]
-            target_p_unproj = select_at_indexes(next_a, target_ps)  # [B,P']
+            target_p_unproj = self.select_at_indexes(next_a, target_ps)  # [B,P']
             target_p_unproj = target_p_unproj.unsqueeze(1)  # [B,1,P']
             target_p = (target_p_unproj * projection_coeffs).sum(-1)  # [B,P]
         ps = self.agent(*samples.agent_inputs)  # [B,A,P]
-        p = select_at_indexes(samples_action, ps)  # [B,P]
+        p = self.select_at_indexes(samples_action, ps)  # [B,P]
         p = torch.clamp(p, EPS, 1)  # NaN-guard.
         losses = -torch.sum(target_p * torch.log(p), dim=1)  # Cross-entropy.
 

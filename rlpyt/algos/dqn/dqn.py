@@ -233,6 +233,24 @@ class DQN(RlAlgorithm):
             done=examples["done"],
         )
 
+    def select_at_indexes(self, indexes, tensor):
+        """Returns the `tensor` data at the multi-dimensional integer array `indexes`.
+
+        Parameters
+        ----------
+        indexes: tensor
+            a tensor of indexes.
+        tensor: tensor
+            a tensor from which to retrieve the data of interest.
+
+        Return
+        ----------
+        result: tensor
+            the resulting data.
+        
+        """
+        return select_at_indexes(indexes, tensor)
+
     def loss(self, samples):
         """
         Computes the Q-learning loss, based on: 0.5 * (Q - target_Q) ^ 2.
@@ -264,13 +282,13 @@ class DQN(RlAlgorithm):
                 device=self.agent.device
             )
         qs = self.agent(*samples.agent_inputs)
-        q = select_at_indexes(samples_action, qs)
+        q = self.select_at_indexes(samples_action, qs)
         with torch.no_grad():
             target_qs = self.agent.target(*samples.target_inputs)
             if self.double_dqn:
                 next_qs = self.agent(*samples.target_inputs)
                 next_a = torch.argmax(next_qs, dim=-1)
-                target_q = select_at_indexes(next_a, target_qs)
+                target_q = self.select_at_indexes(next_a, target_qs)
             else:
                 target_q = torch.max(target_qs, dim=-1).values
         disc_target_q = (self.discount ** self.n_step_return) * target_q

@@ -10,7 +10,7 @@ from rlpyt.utils.collections import namedarraytuple
 from rlpyt.replays.sequence.frame import (UniformSequenceReplayFrameBuffer,
     PrioritizedSequenceReplayFrameBuffer, AsyncUniformSequenceReplayFrameBuffer,
     AsyncPrioritizedSequenceReplayFrameBuffer)
-from rlpyt.utils.tensor import select_at_indexes, valid_mean
+from rlpyt.utils.tensor import valid_mean
 from rlpyt.algos.utils import valid_from_done, discount_return_n_step
 from rlpyt.utils.buffer import buffer_to, buffer_method, torchify_buffer
 
@@ -222,7 +222,7 @@ class R2D1(DQN):
         q = samples.agent.agent_info.q
         action = samples.agent.action
         q_max = torch.max(q, dim=-1).values
-        q_at_a = select_at_indexes(action, q)
+        q_at_a = self.select_at_indexes(action, q)
         return_n, done_n = discount_return_n_step(
             reward=samples.env.reward,
             done=samples.env.done,
@@ -316,13 +316,13 @@ class R2D1(DQN):
             target_rnn_state = init_rnn_state
 
         qs, _ = self.agent(*agent_inputs, init_rnn_state)  # [T,B,A]
-        q = select_at_indexes(action, qs)
+        q = self.select_at_indexes(action, qs)
         with torch.no_grad():
             target_qs, _ = self.agent.target(*target_inputs, target_rnn_state)
             if self.double_dqn:
                 next_qs, _ = self.agent(*target_inputs, init_rnn_state)
                 next_a = torch.argmax(next_qs, dim=-1)
-                target_q = select_at_indexes(next_a, target_qs)
+                target_q = self.select_at_indexes(next_a, target_qs)
             else:
                 target_q = torch.max(target_qs, dim=-1).values
             target_q = target_q[-bT:]  # Same length as q.
