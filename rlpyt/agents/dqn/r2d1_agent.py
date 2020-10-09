@@ -19,8 +19,8 @@ class R2d1AgentBase(DqnAgent):
         prev_action = self.distribution.to_onehot(prev_action)
         model_inputs = buffer_to((observation, prev_action, prev_reward,
             init_rnn_state), device=self.device)
-        q, rnn_state = self.model(*model_inputs)
-        return q, rnn_state  # Leave rnn state on device.
+        output = self.model(*model_inputs) # q, rnn_state
+        return output  # Leave rnn state on device.
 
     def to_agent_step(self, output):
         """Convert the output of the NN model into step info for the agent.
@@ -52,8 +52,8 @@ class R2d1AgentBase(DqnAgent):
         prev_action = self.distribution.to_onehot(prev_action)
         model_inputs = buffer_to((observation, prev_action, prev_reward, init_rnn_state),
             device=self.device)
-        target_q, rnn_state = self.target_model(*model_inputs)
-        return target_q, rnn_state  # Leave rnn state on device.
+        target_output = self.target_model(*model_inputs) # target_q, rnn_state
+        return target_output  # Leave rnn state on device.
 
 
 class R2d1Agent(RecurrentAgentMixin, R2d1AgentBase):
