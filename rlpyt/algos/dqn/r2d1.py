@@ -10,7 +10,7 @@ from rlpyt.utils.collections import namedarraytuple
 from rlpyt.replays.sequence.frame import (UniformSequenceReplayFrameBuffer,
     PrioritizedSequenceReplayFrameBuffer, AsyncUniformSequenceReplayFrameBuffer,
     AsyncPrioritizedSequenceReplayFrameBuffer)
-from rlpyt.utils.tensor import select_at_indexes, valid_mean
+from rlpyt.utils.tensor import valid_mean
 from rlpyt.algos.utils import valid_from_done, discount_return_n_step
 from rlpyt.utils.buffer import buffer_to, buffer_method, torchify_buffer
 
@@ -117,6 +117,56 @@ class R2D1(DQN):
                 " guaranteed.")
         self.replay_buffer = ReplayCls(**replay_kwargs)
         return self.replay_buffer
+    
+    def _get_empty_optim_info(self):
+        """Returns an empty optimization info object.
+
+        Parameters
+        ----------
+
+        Return
+        ----------
+        opt_info: obj
+            the empty optimization info object.
+        
+        """
+        return OptInfo(*([] for _ in range(len(OptInfo._fields))))
+        
+
+    def _apply_optimization(self, samples_from_replay, opt_info):
+        """Applies the optimization for Mixed DQN-like Algos.
+
+        This method is called in the `optimize_agent` method.
+
+        Parameters
+        ----------
+        samples_from_replay: obj
+            the sample data from the replay memory against which the
+            optimization is performed.
+        opt_info: obj
+            the information about the optimization performed so far.
+
+        Return
+        ----------
+        opt_info: obj
+            the updated information with the applied optimization.
+        
+        """
+        self.optimizer.zero_grad()
+        loss, td_abs_errors, priorities = self.loss(samples_from_replay)
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.agent.parameters(), self.clip_grad_norm
+        )
+        self.optimizer.step()
+        if self.prioritized_replay:
+            self.replay_buffer.update_batch_priorities(priorities)
+        opt_info.loss.append(loss.item())
+        opt_info.gradNorm.append(grad_norm)
+        opt_info.tdAbsErr.extend(td_abs_errors[::8].numpy())
+        opt_info.priority.extend(priorities)
+        return opt_info
+        
 
     def optimize_agent(self, itr, samples=None, sampler_itr=None):
         """
@@ -132,26 +182,20 @@ class R2D1(DQN):
         # This could be tough since add samples before the priorities are ready
         # (next batch), and in async case workers must do it.
         itr = itr if sampler_itr is None else sampler_itr  # Async uses sampler_itr
-        if samples is not None:
-            samples_to_buffer = self.samples_to_buffer(samples)
-            self.replay_buffer.append_samples(samples_to_buffer)
-        opt_info = OptInfo(*([] for _ in range(len(OptInfo._fields))))
+
+        # add samples in the replay buffer
+        self.add_samples_to_buffer(itr, samples)
+
+        opt_info = self._get_empty_optim_info()
         if itr < self.min_itr_learn:
             return opt_info
+
+        if itr == self.min_itr_learn:
+            self.pre_optimize_process()
+
         for _ in range(self.updates_per_optimize):
             samples_from_replay = self.replay_buffer.sample_batch(self.batch_B)
-            self.optimizer.zero_grad()
-            loss, td_abs_errors, priorities = self.loss(samples_from_replay)
-            loss.backward()
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.agent.parameters(), self.clip_grad_norm)
-            self.optimizer.step()
-            if self.prioritized_replay:
-                self.replay_buffer.update_batch_priorities(priorities)
-            opt_info.loss.append(loss.item())
-            opt_info.gradNorm.append(grad_norm)
-            opt_info.tdAbsErr.extend(td_abs_errors[::8].numpy())
-            opt_info.priority.extend(priorities)
+            opt_info = self._apply_optimization(samples_from_replay, opt_info)            
             self.update_counter += 1
             if self.update_counter % self.target_update_interval == 0:
                 self.agent.update_target()
@@ -217,7 +261,7 @@ class R2D1(DQN):
         q = samples.agent.agent_info.q
         action = samples.agent.action
         q_max = torch.max(q, dim=-1).values
-        q_at_a = select_at_indexes(action, q)
+        q_at_a = self.select_at_indexes(action, q)
         return_n, done_n = discount_return_n_step(
             reward=samples.env.reward,
             done=samples.env.done,
@@ -311,13 +355,13 @@ class R2D1(DQN):
             target_rnn_state = init_rnn_state
 
         qs, _ = self.agent(*agent_inputs, init_rnn_state)  # [T,B,A]
-        q = select_at_indexes(action, qs)
+        q = self.select_at_indexes(action, qs)
         with torch.no_grad():
             target_qs, _ = self.agent.target(*target_inputs, target_rnn_state)
             if self.double_dqn:
                 next_qs, _ = self.agent(*target_inputs, init_rnn_state)
                 next_a = torch.argmax(next_qs, dim=-1)
-                target_q = select_at_indexes(next_a, target_qs)
+                target_q = self.select_at_indexes(next_a, target_qs)
             else:
                 target_q = torch.max(target_qs, dim=-1).values
             target_q = target_q[-bT:]  # Same length as q.

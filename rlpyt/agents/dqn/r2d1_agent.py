@@ -19,17 +19,13 @@ class R2d1AgentBase(DqnAgent):
         prev_action = self.distribution.to_onehot(prev_action)
         model_inputs = buffer_to((observation, prev_action, prev_reward,
             init_rnn_state), device=self.device)
-        q, rnn_state = self.model(*model_inputs)
-        return q, rnn_state  # Leave rnn state on device.
+        output = self.model(*model_inputs) # q, rnn_state
+        return output  # Leave rnn state on device.
 
-    @torch.no_grad()
-    def step(self, observation, prev_action, prev_reward):
-        """Computes Q-values for states/observations and selects actions by
-        epsilon-greedy (no grad).  Advances RNN state."""
-        prev_action = self.distribution.to_onehot(prev_action)
-        agent_inputs = buffer_to((observation, prev_action, prev_reward),
-            device=self.device)
-        q, rnn_state = self.model(*agent_inputs, self.prev_rnn_state)  # Model handles None.
+    def to_agent_step(self, output):
+        """Convert the output of the NN model into step info for the agent.
+        """
+        q, rnn_state = output
         # q = q.cpu()
         action = self.distribution.sample(q)
         prev_rnn_state = self.prev_rnn_state or buffer_func(rnn_state, torch.zeros_like)
@@ -41,13 +37,23 @@ class R2d1AgentBase(DqnAgent):
         self.advance_rnn_state(rnn_state)  # Keep on device.
         return AgentStep(action=action, agent_info=agent_info)
 
+    @torch.no_grad()
+    def step(self, observation, prev_action, prev_reward):
+        """Computes Q-values for states/observations and selects actions by
+        epsilon-greedy (no grad).  Advances RNN state."""
+        prev_action = self.distribution.to_onehot(prev_action)
+        agent_inputs = buffer_to((observation, prev_action, prev_reward),
+            device=self.device)
+        output = self.model(*agent_inputs, self.prev_rnn_state)  # Model handles None.
+        return self.to_agent_step(output)
+
     def target(self, observation, prev_action, prev_reward, init_rnn_state):
         # Assume init_rnn_state already shaped: [N,B,H]
         prev_action = self.distribution.to_onehot(prev_action)
         model_inputs = buffer_to((observation, prev_action, prev_reward, init_rnn_state),
             device=self.device)
-        target_q, rnn_state = self.target_model(*model_inputs)
-        return target_q, rnn_state  # Leave rnn state on device.
+        target_output = self.target_model(*model_inputs) # target_q, rnn_state
+        return target_output  # Leave rnn state on device.
 
 
 class R2d1Agent(RecurrentAgentMixin, R2d1AgentBase):

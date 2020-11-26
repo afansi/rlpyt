@@ -156,6 +156,70 @@ class DQN(RlAlgorithm):
                 " guaranteed.")
         self.replay_buffer = ReplayCls(**replay_kwargs)
 
+    def add_samples_to_buffer(self, itr, samples=None):
+        """
+        Adds the provided samples in the replay buffer.
+        """
+        assert itr >= 0
+        if samples is not None:
+            samples_to_buffer = self.samples_to_buffer(samples)
+            self.replay_buffer.append_samples(samples_to_buffer)
+
+    def pre_optimize_process(self):
+        """
+        Method for defining any process that shold take place before optimizing
+        the agent. Examples of such process are pretraining, ... 
+        """
+        pass
+    
+    def _get_empty_optim_info(self):
+        """Returns an empty optimization info object.
+
+        Parameters
+        ----------
+
+        Return
+        ----------
+        opt_info: obj
+            the empty optimization info object.
+        
+        """
+        return OptInfo(*([] for _ in range(len(OptInfo._fields))))
+        
+
+    def _apply_optimization(self, samples_from_replay, opt_info):
+        """Applies the optimization for Mixed DQN-like Algos.
+
+        This method is called in the `optimize_agent` method.
+
+        Parameters
+        ----------
+        samples_from_replay: obj
+            the sample data from the replay memory against which the
+            optimization is performed.
+        opt_info: obj
+            the information about the optimization performed so far.
+
+        Return
+        ----------
+        opt_info: obj
+            the updated information with the applied optimization.
+        
+        """
+        self.optimizer.zero_grad()
+        loss, td_abs_errors = self.loss(samples_from_replay)
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.agent.parameters(), self.clip_grad_norm
+        )
+        self.optimizer.step()
+        if self.prioritized_replay:
+            self.replay_buffer.update_batch_priorities(td_abs_errors)
+        opt_info.loss.append(loss.item())
+        opt_info.gradNorm.append(grad_norm)
+        opt_info.tdAbsErr.extend(td_abs_errors[::8].numpy())  # Downsample.
+        return opt_info
+
     def optimize_agent(self, itr, samples=None, sampler_itr=None):
         """
         Extracts the needed fields from input samples and stores them in the 
@@ -165,25 +229,20 @@ class DQN(RlAlgorithm):
         replay, updates the priorities for sampled training batches.
         """
         itr = itr if sampler_itr is None else sampler_itr  # Async uses sampler_itr.
-        if samples is not None:
-            samples_to_buffer = self.samples_to_buffer(samples)
-            self.replay_buffer.append_samples(samples_to_buffer)
-        opt_info = OptInfo(*([] for _ in range(len(OptInfo._fields))))
+
+        # add samples in the replay buffer
+        self.add_samples_to_buffer(itr, samples)
+
+        opt_info = self._get_empty_optim_info()
         if itr < self.min_itr_learn:
             return opt_info
+
+        if itr == self.min_itr_learn:
+            self.pre_optimize_process()
+
         for _ in range(self.updates_per_optimize):
             samples_from_replay = self.replay_buffer.sample_batch(self.batch_size)
-            self.optimizer.zero_grad()
-            loss, td_abs_errors = self.loss(samples_from_replay)
-            loss.backward()
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.agent.parameters(), self.clip_grad_norm)
-            self.optimizer.step()
-            if self.prioritized_replay:
-                self.replay_buffer.update_batch_priorities(td_abs_errors)
-            opt_info.loss.append(loss.item())
-            opt_info.gradNorm.append(grad_norm)
-            opt_info.tdAbsErr.extend(td_abs_errors[::8].numpy())  # Downsample.
+            opt_info = self._apply_optimization(samples_from_replay, opt_info)
             self.update_counter += 1
             if self.update_counter % self.target_update_interval == 0:
                 self.agent.update_target(self.target_update_tau)
@@ -211,6 +270,24 @@ class DQN(RlAlgorithm):
             reward=examples["reward"],
             done=examples["done"],
         )
+
+    def select_at_indexes(self, indexes, tensor):
+        """Returns the `tensor` data at the multi-dimensional integer array `indexes`.
+
+        Parameters
+        ----------
+        indexes: tensor
+            a tensor of indexes.
+        tensor: tensor
+            a tensor from which to retrieve the data of interest.
+
+        Return
+        ----------
+        result: tensor
+            the resulting data.
+        
+        """
+        return select_at_indexes(indexes, tensor)
 
     def loss(self, samples):
         """
@@ -243,13 +320,13 @@ class DQN(RlAlgorithm):
                 device=self.agent.device
             )
         qs = self.agent(*samples.agent_inputs)
-        q = select_at_indexes(samples_action, qs)
+        q = self.select_at_indexes(samples_action, qs)
         with torch.no_grad():
             target_qs = self.agent.target(*samples.target_inputs)
             if self.double_dqn:
                 next_qs = self.agent(*samples.target_inputs)
                 next_a = torch.argmax(next_qs, dim=-1)
-                target_q = select_at_indexes(next_a, target_qs)
+                target_q = self.select_at_indexes(next_a, target_qs)
             else:
                 target_q = torch.max(target_qs, dim=-1).values
         disc_target_q = (self.discount ** self.n_step_return) * target_q
