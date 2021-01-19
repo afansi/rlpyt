@@ -32,22 +32,82 @@ class CategoricalDQN(DQN):
         self.agent.give_V_min_max(self.V_min, self.V_max)
         return buffer
 
+    def _get_loss_values(self, p, done, weigths, target_p):
+        """Computes the loss values given the q and target values.
+
+        Additional parameters are provided such as the:
+          - done: whether the trajectory ended now
+          - weights: weights of the samples (cf. prioritized replay buffers)
+
+        Parameters
+        ----------
+        p: tensor
+            distributional Q-values to consider.
+        done: tensor
+            whether the trajectory ended now.
+        weigths: tensor
+            weights of the samples (cf. prioritized replay buffers).
+        target_p: tensor
+            target distributional values.
+
+        Return
+        ----------
+        loss: tensor
+            the computed loss.
+        KL_div: tensor
+            the KL div between the distributional Q-values.
+        """
+        p = torch.clamp(p, EPS, 1)  # NaN-guard.
+        losses = -torch.sum(target_p * torch.log(p), dim=1)  # Cross-entropy.
+
+        if self.prioritized_replay:
+            losses *= weigths
+
+        target_p = torch.clamp(target_p, EPS, 1)
+        KL_div = torch.sum(
+            target_p * (torch.log(target_p) - torch.log(p.detach())), dim=1
+        )
+        KL_div = torch.clamp(KL_div, EPS, 1 / EPS)  # Avoid <0 from NaN-guard.
+
+        if not self.mid_batch_reset:
+            valid = valid_from_done(done)
+            loss = valid_mean(losses, valid)
+            KL_div *= valid
+        else:
+            loss = torch.mean(losses)
+
+        return loss, KL_div
+
     def loss(self, samples):
         """
         Computes the Distributional Q-learning loss, based on projecting the
         discounted rewards + target Q-distribution into the current Q-domain,
-        with cross-entropy loss.  
+        with cross-entropy loss.
 
         Returns loss and KL-divergence-errors for use in prioritization.
         """
         if self.prioritized_replay:
-            samples_return_, samples_done_n, samples_action, samples_is_weights = buffer_to(
-                (samples.return_, samples.done_n, samples.action, samples.is_weights),
+            [
+                samples_return_,
+                samples_done,
+                samples_done_n,
+                samples_action,
+                samples_is_weights
+            ] = buffer_to(
+                (
+                    samples.return_,
+                    samples.done,
+                    samples.done_n,
+                    samples.action,
+                    samples.is_weights
+                ),
                 device=self.agent.device
             )
         else:
-            samples_return_, samples_done_n, samples_action = buffer_to(
-                (samples.return_, samples.done_n, samples.action),
+            [
+                samples_return_, samples_done, samples_done_n, samples_action
+            ] = buffer_to(
+                (samples.return_, samples.done, samples.done_n, samples.action),
                 device=self.agent.device
             )
         delta_z = (self.V_max - self.V_min) / (self.agent.n_atoms - 1)
@@ -82,22 +142,9 @@ class CategoricalDQN(DQN):
             target_p = (target_p_unproj * projection_coeffs).sum(-1)  # [B,P]
         ps = self.agent(*samples.agent_inputs)  # [B,A,P]
         p = self.select_at_indexes(samples_action, ps)  # [B,P]
-        p = torch.clamp(p, EPS, 1)  # NaN-guard.
-        losses = -torch.sum(target_p * torch.log(p), dim=1)  # Cross-entropy.
 
-        if self.prioritized_replay:
-            losses *= samples_is_weights
-
-        target_p = torch.clamp(target_p, EPS, 1)
-        KL_div = torch.sum(target_p *
-            (torch.log(target_p) - torch.log(p.detach())), dim=1)
-        KL_div = torch.clamp(KL_div, EPS, 1 / EPS)  # Avoid <0 from NaN-guard.
-
-        if not self.mid_batch_reset:
-            valid = valid_from_done(samples.done)
-            loss = valid_mean(losses, valid)
-            KL_div *= valid
-        else:
-            loss = torch.mean(losses)
+        loss, KL_div = self._get_loss_values(
+            p, samples_done, samples_is_weights, target_p
+        )
 
         return loss, KL_div.cpu()

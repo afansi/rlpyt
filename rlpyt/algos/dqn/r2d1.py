@@ -287,6 +287,54 @@ class R2D1(DQN):
         priorities = self.pri_eta * max_d + (1 - self.pri_eta) * mean_d  # [B]
         return priorities.numpy()
 
+    def _get_loss_values(self, q, done, weigths, target):
+        """Computes the loss values given the q and target values.
+
+        Additional parameters are provided such as the:
+          - done: whether the trajectory ended now
+          - weights: weights of the samples (cf. prioritized replay buffers)
+
+        Parameters
+        ----------
+        q: tensor
+            Q-values to consider.
+        done: tensor
+            whether the trajectory ended now.
+        weigths: tensor
+            weights of the samples (cf. prioritized replay buffers).
+        target: tensor
+            target values.
+
+        Return
+        ----------
+        loss: tensor
+            the computed loss.
+        valid_td_abs_errors: tensor
+            the valid td absolute errors.
+        priorities: tensor
+            the computed related priorities.
+        """
+        delta = target - q
+        losses = 0.5 * delta ** 2
+        abs_delta = abs(delta)
+        # NOTE: by default, with R2D1, use squared-error loss, delta_clip=None.
+        if self.delta_clip is not None:  # Huber loss.
+            b = self.delta_clip * (abs_delta - self.delta_clip / 2)
+            losses = torch.where(abs_delta <= self.delta_clip, losses, b)
+        if self.prioritized_replay:
+            losses *= weigths
+        valid = valid_from_done(done)  # 0 after first done.
+        loss = valid_mean(losses, valid)
+        td_abs_errors = abs_delta.detach()
+        if self.delta_clip is not None:
+            td_abs_errors = torch.clamp(td_abs_errors, 0, self.delta_clip)  # [T,B]
+        valid_td_abs_errors = td_abs_errors * valid
+        max_d = torch.max(valid_td_abs_errors, dim=0).values
+        mean_d = valid_mean(td_abs_errors, valid, dim=0)  # Still high if less valid.
+        priorities = self.pri_eta * max_d + (1 - self.pri_eta) * mean_d  # [B]
+
+        return loss, valid_td_abs_errors, priorities
+
     def loss(self, samples):
         """Samples have leading Time and Batch dimentions [T,B,..]. Move all
         samples to device first, and then slice for sub-sequences.  Use same
@@ -323,7 +371,7 @@ class R2D1(DQN):
         action = samples.all_action[wT + 1:wT + 1 + bT]  # CPU.
         return_ = samples.return_[wT:wT + bT]
         done_n = samples.done_n[wT:wT + bT]
-        
+
         if self.prioritized_replay:
             return_, done_n, action, samples_is_weights = buffer_to(
                 (return_, done_n, action, samples.is_weights),
@@ -369,24 +417,13 @@ class R2D1(DQN):
         disc = self.discount ** self.n_step_return
         y = self.value_scale(return_ + (1 - done_n.float()) * disc *
             self.inv_value_scale(target_q))  # [T,B]
-        delta = y - q
-        losses = 0.5 * delta ** 2
-        abs_delta = abs(delta)
-        # NOTE: by default, with R2D1, use squared-error loss, delta_clip=None.
-        if self.delta_clip is not None:  # Huber loss.
-            b = self.delta_clip * (abs_delta - self.delta_clip / 2)
-            losses = torch.where(abs_delta <= self.delta_clip, losses, b)
-        if self.prioritized_replay:
-            losses *= samples_is_weights.unsqueeze(0)  # weights: [B] --> [1,B]
-        valid = valid_from_done(samples.done[wT:])  # 0 after first done.
-        loss = valid_mean(losses, valid)
-        td_abs_errors = abs_delta.detach()
-        if self.delta_clip is not None:
-            td_abs_errors = torch.clamp(td_abs_errors, 0, self.delta_clip)  # [T,B]
-        valid_td_abs_errors = td_abs_errors * valid
-        max_d = torch.max(valid_td_abs_errors, dim=0).values
-        mean_d = valid_mean(td_abs_errors, valid, dim=0)  # Still high if less valid.
-        priorities = self.pri_eta * max_d + (1 - self.pri_eta) * mean_d  # [B]
+
+        loss, valid_td_abs_errors, priorities = self._get_loss_values(
+            q,
+            samples.done[wT:],
+            samples_is_weights.unsqueeze(0),  # weights: [B] --> [1,B]
+            y
+        )
 
         return loss, valid_td_abs_errors.cpu(), priorities.cpu()
 

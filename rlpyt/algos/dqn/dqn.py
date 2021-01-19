@@ -285,15 +285,63 @@ class DQN(RlAlgorithm):
         ----------
         result: tensor
             the resulting data.
-        
         """
         return select_at_indexes(indexes, tensor)
+
+    def _get_loss_values(self, q, done, weigths, target):
+        """Computes the loss values given the q and target values.
+
+        Additional parameters are provided such as the:
+          - done: whether the trajectory ended now
+          - weights: weights of the samples (cf. prioritized replay buffers)
+
+        Parameters
+        ----------
+        q: tensor
+            Q-values to consider.
+        done: tensor
+            whether the trajectory ended now.
+        weigths: tensor
+            weights of the samples (cf. prioritized replay buffers).
+        target: tensor
+            target values.
+
+        Return
+        ----------
+        loss: tensor
+            the computed loss.
+        td_abs_errors: tensor
+            the td absolute errors.
+        """
+        delta = target - q
+        losses = 0.5 * delta ** 2
+        abs_delta = abs(delta)
+        if self.delta_clip is not None:  # Huber loss.
+            b = self.delta_clip * (abs_delta - self.delta_clip / 2)
+            losses = torch.where(abs_delta <= self.delta_clip, losses, b)
+        if self.prioritized_replay:
+            losses *= weigths
+        td_abs_errors = abs_delta.detach()
+        if self.delta_clip is not None:
+            td_abs_errors = torch.clamp(td_abs_errors, 0, self.delta_clip)
+        if not self.mid_batch_reset:
+            # FIXME: I think this is wrong, because the first "done" sample
+            # is valid, but here there is no [T] dim, so there's no way to
+            # know if a "done" sample is the first "done" in the sequence.
+            raise NotImplementedError
+            # valid = valid_from_done(done)
+            # loss = valid_mean(losses, valid)
+            # td_abs_errors *= valid
+        else:
+            loss = torch.mean(losses)
+
+        return loss, td_abs_errors
 
     def loss(self, samples):
         """
         Computes the Q-learning loss, based on: 0.5 * (Q - target_Q) ^ 2.
         Implements regular DQN or Double-DQN for computing target_Q values
-        using the agent's target network.  Computes the Huber loss using 
+        using the agent's target network.  Computes the Huber loss using
         ``delta_clip``, or if ``None``, uses MSE.  When using prioritized
         replay, multiplies losses by importance sample weights.
 
@@ -304,19 +352,33 @@ class DQN(RlAlgorithm):
 
         Returns loss and TD-absolute-errors for use in prioritization.
 
-        Warning: 
+        Warning:
             If not using mid_batch_reset, the sampler will only reset environments
             between iterations, so some samples in the replay buffer will be
             invalid.  This case is not supported here currently.
         """
         if self.prioritized_replay:
-            samples_return_, samples_done_n, samples_action, samples_is_weights = buffer_to(
-                (samples.return_, samples.done_n, samples.action, samples.is_weights),
+            [
+                samples_return_,
+                samples_done,
+                samples_done_n,
+                samples_action,
+                samples_is_weights
+            ] = buffer_to(
+                (
+                    samples.return_,
+                    samples.done,
+                    samples.done_n,
+                    samples.action,
+                    samples.is_weights
+                ),
                 device=self.agent.device
             )
         else:
-            samples_return_, samples_done_n, samples_action = buffer_to(
-                (samples.return_, samples.done_n, samples.action),
+            [
+                samples_return_, samples_done, samples_done_n, samples_action
+            ] = buffer_to(
+                (samples.return_, samples.done, samples.done_n, samples.action),
                 device=self.agent.device
             )
         qs = self.agent(*samples.agent_inputs)
@@ -331,27 +393,10 @@ class DQN(RlAlgorithm):
                 target_q = torch.max(target_qs, dim=-1).values
         disc_target_q = (self.discount ** self.n_step_return) * target_q
         y = samples_return_ + (1 - samples_done_n.float()) * disc_target_q
-        delta = y - q
-        losses = 0.5 * delta ** 2
-        abs_delta = abs(delta)
-        if self.delta_clip is not None:  # Huber loss.
-            b = self.delta_clip * (abs_delta - self.delta_clip / 2)
-            losses = torch.where(abs_delta <= self.delta_clip, losses, b)
-        if self.prioritized_replay:
-            losses *= samples_is_weights
-        td_abs_errors = abs_delta.detach()
-        if self.delta_clip is not None:
-            td_abs_errors = torch.clamp(td_abs_errors, 0, self.delta_clip)
-        if not self.mid_batch_reset:
-            # FIXME: I think this is wrong, because the first "done" sample
-            # is valid, but here there is no [T] dim, so there's no way to
-            # know if a "done" sample is the first "done" in the sequence.
-            raise NotImplementedError
-            # valid = valid_from_done(samples.done)
-            # loss = valid_mean(losses, valid)
-            # td_abs_errors *= valid
-        else:
-            loss = torch.mean(losses)
+
+        loss, td_abs_errors = self._get_loss_values(
+            q, samples_done, samples_is_weights, y
+        )
 
         return loss, td_abs_errors.cpu()
 
