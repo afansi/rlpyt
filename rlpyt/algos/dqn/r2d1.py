@@ -420,7 +420,7 @@ class R2D1(DQN):
 
         loss, valid_td_abs_errors, priorities = self._get_loss_values(
             q,
-            samples.done[wT:],
+            samples.done[wT:wT + bT],
             samples_is_weights.unsqueeze(0),  # weights: [B] --> [1,B]
             y
         )
