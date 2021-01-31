@@ -371,15 +371,16 @@ class R2D1(DQN):
         action = samples.all_action[wT + 1:wT + 1 + bT]  # CPU.
         return_ = samples.return_[wT:wT + bT]
         done_n = samples.done_n[wT:wT + bT]
+        done = samples.done
 
         if self.prioritized_replay:
-            return_, done_n, action, samples_is_weights = buffer_to(
-                (return_, done_n, action, samples.is_weights),
+            return_, done, done_n, action, samples_is_weights = buffer_to(
+                (return_, done, done_n, action, samples.is_weights),
                 device=self.agent.device
             )
         else:
-            return_, done_n, action = buffer_to(
-                (return_, done_n, action),
+            return_, done, done_n, action = buffer_to(
+                (return_, done, done_n, action),
                 device=self.agent.device
             )
         if self.store_rnn_state_interval == 0:
@@ -396,7 +397,7 @@ class R2D1(DQN):
             # warmup_T (and no mid_batch_reset), so that end of trajectory
             # during warmup leads to new trajectory beginning at start of
             # training segment of replay.
-            warmup_invalid_mask = valid_from_done(samples.done[:wT])[-1] == 0  # [B]
+            warmup_invalid_mask = valid_from_done(done[:wT])[-1] == 0  # [B]
             init_rnn_state[:, warmup_invalid_mask] = 0  # [N,B,H] (cudnn)
             target_rnn_state[:, warmup_invalid_mask] = 0
         else:
@@ -420,7 +421,7 @@ class R2D1(DQN):
 
         loss, valid_td_abs_errors, priorities = self._get_loss_values(
             q,
-            samples.done[wT:wT + bT],
+            done[wT:wT + bT],
             samples_is_weights.unsqueeze(0),  # weights: [B] --> [1,B]
             y
         )
