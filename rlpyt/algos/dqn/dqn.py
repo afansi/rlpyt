@@ -249,6 +249,14 @@ class DQN(RlAlgorithm):
         self.update_itr_hyperparams(itr)
         return opt_info
 
+    def examples_to_buffer(self, examples):
+        return SamplesToBuffer(
+            observation=examples["observation"],
+            action=examples["action"],
+            reward=examples["reward"],
+            done=examples["done"],
+        )
+
     def samples_to_buffer(self, samples):
         """Defines how to add data from sampler into the replay buffer. Called
         in optimize_agent() if samples are provided to that method.  In 
