@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from collections import namedtuple
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.nn.parallel import DistributedDataParallelCPU as DDPC
+# from torch.nn.parallel import DistributedDataParallelCPU as DDPC  # Deprecated
 
 from rlpyt.agents.base import BaseAgent, AgentStep
 from rlpyt.models.qpg.mlp import QofMuMlpModel, PiMlpModel
@@ -81,10 +81,18 @@ class SacAgent(BaseAgent):
         self.target_q2_model.to(self.device)
 
     def data_parallel(self):
-        super().data_parallel
-        DDP_WRAP = DDPC if self.device.type == "cpu" else DDP
-        self.q1_model = DDP_WRAP(self.q1_model)
-        self.q2_model = DDP_WRAP(self.q2_model)
+        device_id = super().data_parallel
+        self.q1_model = DDP(
+            self.q1_model,
+            device_ids=None if device_id is None else [device_id],  # 1 GPU.
+            output_device=device_id,
+        )
+        self.q2_model = DDP(
+            self.q2_model,
+            device_ids=None if device_id is None else [device_id],  # 1 GPU.
+            output_device=device_id,
+        )
+        return device_id
 
     def give_min_itr_learn(self, min_itr_learn):
         self.min_itr_learn = min_itr_learn  # From algo.
@@ -109,8 +117,8 @@ class SacAgent(BaseAgent):
         """Compute twin target Q-values for state/observation and input
         action.""" 
         model_inputs = buffer_to((observation, prev_action,
-        prev_reward, action), device=self.device)
-        target_q1 =self.target_q1_model(*model_inputs)
+            prev_reward, action), device=self.device)
+        target_q1 = self.target_q1_model(*model_inputs)
         target_q2 = self.target_q2_model(*model_inputs)
         return target_q1.cpu(), target_q2.cpu()
 

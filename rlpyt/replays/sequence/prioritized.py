@@ -124,5 +124,5 @@ class PrioritizedSequenceReplayBuffer(PrioritizedSequenceReplay,
 
 
 class AsyncPrioritizedSequenceReplayBuffer(AsyncReplayBufferMixin,
-        PrioritizedSequenceReplay):
+        PrioritizedSequenceReplayBuffer):
     pass
