@@ -389,6 +389,7 @@ class DQN(RlAlgorithm):
                 (samples.return_, samples.done, samples.done_n, samples.action),
                 device=self.agent.device
             )
+            samples_is_weights = None
         qs = self.agent(*samples.agent_inputs)
         q = self.select_at_indexes(samples_action, qs)
         with torch.no_grad():
