@@ -383,6 +383,7 @@ class R2D1(DQN):
                 (return_, done, done_n, action),
                 device=self.agent.device
             )
+            samples_is_weights = None
         if self.store_rnn_state_interval == 0:
             init_rnn_state = None
         else:
@@ -422,7 +423,7 @@ class R2D1(DQN):
         loss, valid_td_abs_errors, priorities = self._get_loss_values(
             q,
             done[wT:wT + bT],
-            samples_is_weights.unsqueeze(0),  # weights: [B] --> [1,B]
+            None if samples_is_weights is None else samples_is_weights.unsqueeze(0),  # weights: [B] --> [1,B]
             y
         )
 
