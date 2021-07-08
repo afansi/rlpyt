@@ -6,7 +6,7 @@ from rlpyt.agents.base import AgentInputs
 
 from rlpyt.utils.tensor import valid_mean
 from rlpyt.utils.quick_args import save__init__args
-from rlpyt.utils.buffer import buffer_method
+from rlpyt.utils.buffer import buffer_method, buffer_to
 
 
 class A2C(PolicyGradientAlgo):
@@ -42,11 +42,16 @@ class A2C(PolicyGradientAlgo):
         """
         Train the agent on input samples, by one gradient step.
         """
+        agent_inputs = AgentInputs(  # Move inputs to device once, index there.
+            observation=samples.env.observation,
+            prev_action=samples.agent.prev_action,
+            prev_reward=samples.env.prev_reward,
+        )
+        agent_inputs = buffer_to(agent_inputs, device=self.agent.device)
         if hasattr(self.agent, "update_obs_rms"):
-            # NOTE: suboptimal--obs sent to device here and in agent(*inputs).
-            self.agent.update_obs_rms(samples.env.observation)
+            self.agent.update_obs_rms(agent_inputs.observation)
         self.optimizer.zero_grad()
-        loss, entropy, perplexity = self.loss(samples)
+        loss, entropy, perplexity = self.loss(samples, agent_inputs)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(
             self.agent.parameters(), self.clip_grad_norm)
@@ -60,7 +65,7 @@ class A2C(PolicyGradientAlgo):
         self.update_counter += 1
         return opt_info
 
-    def loss(self, samples):
+    def loss(self, samples, agent_inputs=None):
         """
         Computes the training loss: policy_loss + value_loss + entropy_loss.
         Policy loss: log-likelihood of actions * advantages
@@ -70,11 +75,12 @@ class A2C(PolicyGradientAlgo):
         ``agent.distribution`` to compute likelihoods and entropies.  Valid
         for feedforward or recurrent agents.
         """
-        agent_inputs = AgentInputs(
-            observation=samples.env.observation,
-            prev_action=samples.agent.prev_action,
-            prev_reward=samples.env.prev_reward,
-        )
+        if agent_inputs is None:
+            agent_inputs = AgentInputs(
+                observation=samples.env.observation,
+                prev_action=samples.agent.prev_action,
+                prev_reward=samples.env.prev_reward,
+            )
         if self.agent.recurrent:
             init_rnn_state = samples.agent.agent_info.prev_rnn_state[0]  # T = 0.
             # [B,N,H] --> [N,B,H] (for cudnn).
@@ -86,8 +92,13 @@ class A2C(PolicyGradientAlgo):
         # TODO: try to compute everyone on device.
         return_, advantage, valid = self.process_returns(samples)
 
+        return_, advantage, valid, samples_agent_action = buffer_to(
+            (return_, advantage, valid, samples.agent.action),
+            device=self.agent.device
+        )
+
         dist = self.agent.distribution
-        logli = dist.log_likelihood(samples.agent.action, dist_info)
+        logli = dist.log_likelihood(samples_agent_action, dist_info)
         pi_loss = - valid_mean(logli * advantage, valid)
 
         value_error = 0.5 * (value - return_) ** 2

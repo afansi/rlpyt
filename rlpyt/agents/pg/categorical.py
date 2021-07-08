@@ -22,7 +22,7 @@ class CategoricalPgAgent(BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward),
             device=self.device)
         pi, value = self.model(*model_inputs)
-        return buffer_to((DistInfo(prob=pi), value), device="cpu")
+        return (DistInfo(prob=pi), value)
 
     def initialize(self, env_spaces, share_memory=False,
             global_B=1, env_ranks=None):
@@ -59,7 +59,7 @@ class RecurrentCategoricalPgAgentBase(BaseAgent):
         model_inputs = buffer_to((observation, prev_action, prev_reward,
             init_rnn_state), device=self.device)
         pi, value, next_rnn_state = self.model(*model_inputs)
-        dist_info, value = buffer_to((DistInfo(prob=pi), value), device="cpu")
+        dist_info = DistInfo(prob=pi)
         return dist_info, value, next_rnn_state  # Leave rnn_state on device.
 
     def initialize(self, env_spaces, share_memory=False,

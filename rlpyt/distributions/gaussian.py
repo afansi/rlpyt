@@ -138,6 +138,12 @@ class Gaussian(Distribution):
         logli_new = self.log_likelihood(x, new_dist_info)
         return torch.exp(logli_new - logli_old)
 
+    def component_log_likelihood_ratio(self, x, dist_info):
+        return self.log_likelihood(x, dist_info)
+
+    def log_likelihood_ratio_from_component(self, old_dist_component, new_dist_component):
+        return torch.exp(new_dist_component - old_dist_component)
+
     def sample_loglikelihood(self, dist_info):
         """
         Special method for use with SAC algorithm, which returns a new sampled 

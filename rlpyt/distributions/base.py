@@ -39,6 +39,22 @@ class Distribution:
         """
         raise NotImplementedError
 
+    def component_log_likelihood_ratio(self, x, dist_info):
+        """
+        Compute log-likelihood component useful in computing likelihood_ratio of samples ``x``
+        at distributions described in
+        ``dist_info`` (i.e. can have same leading dimensions [T, B]).
+        """
+        raise NotImplementedError
+
+    def log_likelihood_ratio_from_component(self, old_dist_component, new_dist_component):
+        """
+        Compute log-likelihood component useful in computing likelihood_ratio of samples ``x``
+        at distributions described in
+        ``dist_info`` (i.e. can have same leading dimensions [T, B]).
+        """
+        raise NotImplementedError
+
     def likelihood_ratio(self, x, old_dist_info, new_dist_info):
         """
         Compute likelihood ratio of samples ``x`` at new distributions over
